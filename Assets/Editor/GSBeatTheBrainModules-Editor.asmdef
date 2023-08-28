@@ -1,0 +1,10 @@
+{
+  "name": "GSBeatTheBrainModules-Editor",
+  "references": [
+    "GSBeatTheBrainModules"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": []
+}

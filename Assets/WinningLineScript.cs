@@ -18,13 +18,14 @@ public class WinningLineScript : MonoBehaviour
     public KMSelectable[] Buttons;
     public Image[] MainGridSymbols;
     public Image[] AnswerGridSymbols;
-    public Image MainGrid;
+    public Image MainGrid, Overlay;
     public Image[] AnswerGrids;
     public Sprite[] Symbols;
     public Text Instructions;
     public Text[] AnswerGridTexts;
     public MeshRenderer[] LEDs;
 
+    private KMAudio.KMAudioRef Sound;
     private enum GameState
     {
         Waiting,
@@ -35,16 +36,16 @@ public class WinningLineScript : MonoBehaviour
         Solved
     }
 
-    private static readonly int[] AnswerIndexes = new[] { 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7 };
+    private static readonly int[] AnswerIndexes = new[] { 0, 0, 1, 1, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7 };
     private int[] Answers;
-    private int AnswerPos, CurrentStage = 2, CurrentState, Highlighted, Selected;
-    private static readonly string[] AllGrids = new[] { "XXXX...X.", "XXXX....X", "X..XXX.X.", ".X.XXXX..", ".X.XXX..X", "..XXXX.X.", "X....XXXX", ".X...XXXX", "XX.X.XX..", "XX.X..X.X", "XX..XX.X.", ".XXXX..X.", ".X.XX..XX", ".X..XXXX.", "X.X..X.XX", "..XX.X.XX", "XX.XX...X", "XX..XX..X", "XX..X.X.X", "X.XXX...X", "X.X.X..XX", "X..XX..XX", "X...XXX.X", "X...XX.XX", "X.X.XXX..", "X.X.X.XX.", ".XXXX.X..", ".XX.XXX..", ".XX.X.X.X", "..XXX.XX.", "..XXX.X.X", "..X.XXXX." };
+    private int AnswerPos, CurrentStage, CurrentState, Highlighted, Selected;
+    private static readonly string[] AllGrids = new[] { "XXXX...X.", "XXXX....X", "X..XXX.X.", ".X.XXXX..", ".X.XXX..X", "..XXXX.X.", "X....XXXX", ".X...XXXX", "XX.X.XX..", "XX.X..X.X", "XX..XX.X.", ".XXXX..X.", ".X.XX..XX", ".X..XXXX.", "X.X..X.XX", "..XX.X.XX", "XX.XX...X", "XX..XX..X", "XX..X.X.X", "X.XXX...X", "X.X.X..XX", "X..XX..XX", "X...XXX.X", "X...XX.XX", "X.X.XXX..", "X.X.X.XX.", ".XXXX.X..", ".XX.XXX..", ".XX.X.X.X", "..XXX.XX.", "..XXX.X.X", "..X.XXXX.", "XX..X...X", "X.X.X...X", "X..XX...X", "X...XX..X", "X...X.X.X", "X...X..XX", "X.X.X.X..", ".XX.X.X..", "..XXX.X..", "..X.XXX..", "..X.X.XX.", "..X.X.X.X" };
     private static readonly string[] Lines = new[] { "XXX......", "...XXX...", "......XXX", "X..X..X..", ".X..X..X.", "..X..X..X", "X...X...X", "..X.X.X.." };
     private string AnswerDisplayable, Grid;
 
     private int[] GetAnswers()
     {
-        return Enumerable.Range(0, 8).ToArray().Shuffle().Take(4).ToArray();
+        return Enumerable.Range(0, 8).Where(x => CurrentStage == 2 ? true : CurrentStage == 1 ? !new[] { 3, 4, 5 }.Contains(x) : !new[] { 0, 1, 2 }.Contains(x)).ToArray().Shuffle().Take(4).ToArray();
     }
 
     private string GenerateGrid()
@@ -68,7 +69,7 @@ public class WinningLineScript : MonoBehaviour
         for (int i = 0; i < Buttons.Length; i++)
         {
             int x = i;
-            Buttons[x].OnHighlight += delegate { if (CurrentState != (int)GameState.ShowingAnswers) FindHighlight(x).color = Color.white; Highlighted = x; };
+            Buttons[x].OnHighlight += delegate { if (CurrentState != (int)GameState.ShowingAnswers && CurrentState != (int)GameState.ShowingAnswer && CurrentState != (int)GameState.Solved) FindHighlight(x).color = Color.white; Highlighted = x; };
             Buttons[x].OnHighlightEnded += delegate { FindHighlight(x).color = Color.clear; Highlighted = -1; };
             FindHighlight(x).color = Color.clear;
             if (x != 4)
@@ -92,17 +93,24 @@ public class WinningLineScript : MonoBehaviour
 
     void StartRound()
     {
+        Buttons[4].AddInteractionPunch();
         CurrentState = (int)GameState.ShowingGrid;
         Buttons[4].gameObject.SetActive(false);
         Instructions.text = "WATCH THE GAME OF NOUGHTS AND\nCROSSES";
+        Sound = Audio.HandlePlaySoundAtTransformWithRef("music", transform, false);
+        Debug.LogFormat("[Winning Line #{0}] Starting round {1}.", _moduleID, CurrentStage + 1);
+        Debug.LogFormat("[Winning Line #{0}] The winning line was answer {1}.", _moduleID, new[] { "A", "B", "C", "D" }[AnswerPos]);
         StartCoroutine(ShowGrid());
     }
 
     void SubmitAnswer(int pos)
     {
+        Buttons[pos].AddInteractionPunch();
         Selected = pos;
         CurrentState = (int)GameState.ShowingAnswer;
         Audio.PlaySoundAtTransform("select", Buttons[pos].transform);
+        if (Sound != null)
+            Sound.StopSound();
         StartCoroutine(ShowAnswer());
     }
 
@@ -134,10 +142,11 @@ public class WinningLineScript : MonoBehaviour
         for (int i = 0; i < 9; i++)
             MainGridSymbols[i].gameObject.SetActive(false);
         for (int i = 0; i < 4; i++)
-            AnswerGrids[i].gameObject.SetActive(false);
+            AnswerGrids[i].transform.localScale = Vector3.zero;
         Instructions.text = "PRESS THE DISPLAY TO START";
         for (int i = 0; i < Buttons.Length - 1; i++)
             Buttons[i].transform.localScale = Vector3.zero;
+        Overlay.color = Color.clear;
     }
 
     private IEnumerator ShowAnswer(float scaleDuration = 1f, float fadeDuration = 0.5f)
@@ -150,18 +159,30 @@ public class WinningLineScript : MonoBehaviour
             yield return null;
             timer += Time.deltaTime;
         }
-        if (Selected == AnswerPos)
+        Audio.PlaySoundAtTransform("reveal", Buttons[AnswerPos].transform);
+        if (Selected != AnswerPos)
+        {
             Module.HandleStrike();
+            Debug.LogFormat("[Winning Line #{0}] You chose answer {1}, which was incorrect. Strike!", _moduleID, new[] { "A", "B", "C", "D" }[Selected]);
+            yield return "strike";
+        }
         else
         {
             LEDs[CurrentStage].material.color = new Color32(0, 237, 255, 255);
             CurrentStage++;
             if (CurrentStage == 3)
+            {
                 Module.HandlePass();
+                yield return "solve";
+                Audio.PlaySoundAtTransform("solve", transform);
+                CurrentState = (int)GameState.Solved;
+                Instructions.text = "MODULE SOLVED!";
+            }
+            Debug.LogFormat("[Winning Line #{0}] You chose answer {1}, which was correct. {2}", _moduleID, new[] { "A", "B", "C", "D" }[Selected], CurrentState == (int)GameState.Solved ? "Module solved!" : "Onto the next round!");
         }
         for (int i = 0; i < 4; i++)
             if (i != AnswerPos)
-                AnswerGrids[i].gameObject.SetActive(false);
+                AnswerGrids[i].transform.localScale = Vector3.zero;
         var init = AnswerGrids[AnswerPos].transform.localPosition;
         timer = 0;
         while (timer < scaleDuration)
@@ -174,11 +195,20 @@ public class WinningLineScript : MonoBehaviour
         AnswerGrids[AnswerPos].transform.localPosition = new Vector3(150, 0, 0);
         AnswerGrids[AnswerPos].transform.localScale = Vector3.one * 2;
         timer = 0;
-        while (timer < 0.25f)
+        while (timer < 0.5f)
         {
             yield return null;
             timer += Time.deltaTime;
         }
+        if (CurrentState != (int)GameState.Solved)
+            Instructions.text = "PRESS THE DISPLAY TO START";
+        else
+        {
+            StartCoroutine(SolveAnim());
+            yield break;
+        }
+        AnswerGrids[AnswerPos].transform.localScale = Vector3.zero;
+        AnswerGrids[AnswerPos].transform.localPosition = init;
         timer = 0;
         while (timer < fadeDuration)
         {
@@ -187,8 +217,24 @@ public class WinningLineScript : MonoBehaviour
             MainGrid.color = Color.Lerp(new Color32(255, 125, 45, 0), new Color32(255, 125, 45, 255), timer / fadeDuration);
         }
         MainGrid.color = new Color32(255, 125, 45, 255);
-        CurrentState = (int)GameState.Waiting;
-        Buttons[4].gameObject.SetActive(true);
+        if (CurrentState != (int)GameState.Solved)
+        {
+            CurrentState = (int)GameState.Waiting;
+            ArrangeSymbols();
+            Buttons[4].gameObject.SetActive(true);
+        }
+    }
+
+    private IEnumerator SolveAnim(float duration = 0.5f)
+    {
+        float timer = 0;
+        while (timer < duration)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            Overlay.color = Color.Lerp(Color.clear, Color.black, timer / duration);
+        }
+        Overlay.color = Color.black;
     }
 
     private IEnumerator ShowGrid(float outDuration = 0.75f)
@@ -217,7 +263,7 @@ public class WinningLineScript : MonoBehaviour
         {
             StartCoroutine(ShowTriplet(order[i], i == 2));
             timer = 0;
-            while (timer < 1.25f - CurrentStage * 0.1f)
+            while (timer < 1f - CurrentStage * 0.175f)
             {
                 yield return null;
                 timer += Time.deltaTime;
@@ -235,9 +281,9 @@ public class WinningLineScript : MonoBehaviour
         StartCoroutine(ShowAnswers());
     }
 
-    private IEnumerator ShowTriplet(List<int> order, bool isLast, float inDuration = 0.25f, float outDuration = 0.9f)
+    private IEnumerator ShowTriplet(List<int> order, bool isLast, float inDuration = 0.25f, float outDuration = 0.75f)
     {
-        outDuration -= CurrentStage * 0.1f;
+        outDuration -= CurrentStage * 0.175f;
         foreach (var ix in order)
         {
             MainGridSymbols[ix].gameObject.SetActive(true);
@@ -287,7 +333,7 @@ public class WinningLineScript : MonoBehaviour
         Instructions.text = "WHICH FORMATION WON THE GAME?";
         for (int i = 0; i < 4; i++)
         {
-            AnswerGrids[i].gameObject.SetActive(true);
+            AnswerGrids[i].transform.localScale = Vector3.one;
             for (int j = 0; j < 9; j++)
                 AnswerGridSymbols[(i * 9) + j].gameObject.SetActive(false);
             var init = AnswerGrids[i].color;
@@ -334,5 +380,53 @@ public class WinningLineScript : MonoBehaviour
         CurrentState = (int)GameState.WaitingForAnswer;
         if (Highlighted > -1)
             FindHighlight(Highlighted).color = Color.white;
+    }
+
+#pragma warning disable 414
+    private string TwitchHelpMessage = "Use '!{0} go' to press the display. Use '!{0} A' to submit answer A.";
+#pragma warning restore 414
+
+    IEnumerator ProcessTwitchCommand(string command)
+    {
+        command = command.ToLowerInvariant();
+        var validCommands = new[] { "a", "b", "c", "d", "go" };
+        if (!validCommands.Contains(command))
+        {
+            yield return "sendtochaterror Invalid command.";
+            yield break;
+        }
+        else if (command == "go" && CurrentState != (int)GameState.Waiting)
+        {
+            yield return "sendtochaterror Cannot start another round yet!";
+            yield break;
+        }
+        else if (command != "go" && CurrentState != (int)GameState.WaitingForAnswer)
+        {
+            yield return "sendtochaterror Cannot select an answer yet!";
+            yield break;
+        }
+        else
+        {
+            yield return null;
+            Buttons[Array.IndexOf(validCommands, command)].OnInteract();
+        }
+    }
+    IEnumerator TwitchHandleForcedSolve()
+    {
+        while (CurrentState != (int)GameState.Solved)
+        {
+            switch (CurrentState)
+            {
+                case (int)GameState.Waiting:
+                    Buttons[4].OnInteract();
+                    break;
+                case (int)GameState.WaitingForAnswer:
+                    Buttons[AnswerPos].OnInteract();
+                    break;
+                default:
+                    yield return true;
+                    break;
+            }
+        }
     }
 }
