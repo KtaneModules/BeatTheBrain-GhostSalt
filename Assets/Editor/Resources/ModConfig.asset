@@ -14,7 +14,16 @@ MonoBehaviour:
   id: GSBeatTheBrainModules
   title: Beat the Brain Modules
   author: GhostSalt
-  description: gbhfsdghfbnfghdjbuhbjfgdhbjdfg
+  description: 'A collection of modules from the British gameshow Beat the Brain.
+    This pack includes:
+
+
+    -Winning Line
+
+    -Catch Me if You Can
+
+
+    yeah, you know that this has TP already.'
   version: 1.0
   outputFolder: build
-  previewImage: {fileID: 0}
+  previewImage: {fileID: 2800000, guid: b9e37d1ffdd5f9d4a880d1f043e9d792, type: 3}
