@@ -39,11 +39,6 @@ public class CatchMeIfYouCanScript : MonoBehaviour
     private int AnswerPos, CurrentStage, CurrentState, Highlighted, Selected;
     private List<string> Answers = new List<string>();
 
-    private int[] GetAnswers()
-    {
-        return Enumerable.Range(0, 8).Where(x => CurrentStage == 2 ? true : CurrentStage == 1 ? !new[] { 3, 4, 5 }.Contains(x) : !new[] { 0, 1, 2 }.Contains(x)).ToArray().Shuffle().Take(4).ToArray();
-    }
-
     private string GenerateNumberplate()
     {
         var lettersInitial = new char[] { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y' }.Shuffle().Join("");
