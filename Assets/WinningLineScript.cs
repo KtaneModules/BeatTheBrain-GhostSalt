@@ -149,6 +149,19 @@ public class WinningLineScript : MonoBehaviour
         Overlay.color = Color.clear;
     }
 
+    void RegenStage()   //for TP
+    {
+        for (int i = 0; i < 4; i++)
+            AnswerGrids[i].transform.localScale = Vector3.zero;
+        MainGrid.color = new Color32(255, 125, 45, 255);
+        CurrentState = (int)GameState.Waiting;
+        ArrangeSymbols();
+        Buttons[4].gameObject.SetActive(true);
+        CurrentState = (int)GameState.Waiting;
+        Instructions.text = "PRESS THE DISPLAY TO START";
+        ArrangeSymbols();
+    }
+
     private IEnumerator ShowAnswer(float scaleDuration = 1f, float fadeDuration = 0.5f)
     {
         for (int i = 0; i < Buttons.Length; i++)
@@ -383,13 +396,25 @@ public class WinningLineScript : MonoBehaviour
     }
 
 #pragma warning disable 414
-    private string TwitchHelpMessage = "Use '!{0} go' to press the display. Use '!{0} A' to submit answer A.";
+    private string TwitchHelpMessage = "Use '!{0} go' to press the display. Use '!{0} A' to submit answer A. If something caused the stream to lag, making the grid reveal impossible to see, use '!{0} regen' to regenerate the round, with no penalty.";
 #pragma warning restore 414
 
     IEnumerator ProcessTwitchCommand(string command)
     {
         command = command.ToLowerInvariant();
         var validCommands = new[] { "a", "b", "c", "d", "go" };
+        if (CurrentState == (int)GameState.WaitingForAnswer && command == "regen")
+        {
+            yield return null;
+            yield return $"sendtochat Regenerating round {CurrentStage + 1}.";
+            RegenStage();
+            yield break;
+        }
+        else if (command == "regen")
+        {
+            yield return "sendtochaterror Cannot regenerate this round yet!";
+            yield break;
+        }
         if (!validCommands.Contains(command))
         {
             yield return "sendtochaterror Invalid command.";

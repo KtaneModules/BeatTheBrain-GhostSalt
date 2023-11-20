@@ -68,12 +68,8 @@ public class CatchMeIfYouCanScript : MonoBehaviour
         var commonIx = Enumerable.Range(0, 7).Where(x => x != answerBase.MutationIx).PickRandom();
         Answers.Add(correct);
         for (int i = 0; i < 7; i++)
-        {
-            var candidateIx = (i > 3 ? i + 1 : i);
-            if (candidateIx == commonIx || candidateIx == answerBase.MutationIx)
-                continue;
-            Answers.Add(MutateAnswer(answerBase.Numberplate, i).Numberplate);
-        }
+            if (i != commonIx && i != answerBase.MutationIx)
+                Answers.Add(MutateAnswer(answerBase.Numberplate, i).Numberplate);
         Answers.Shuffle();
         AnswerPos = Answers.IndexOf(correct);
         for (int i = 0; i < 6; i++)
@@ -84,16 +80,17 @@ public class CatchMeIfYouCanScript : MonoBehaviour
     {
         if (ix == -1)
             ix = Rnd.Range(0, 7);
+        var oldIx = ix;
         if (ix > 3)
             ix++;
         char mutatedLetter;
         if (ix < 2)
-            mutatedLetter = new List<char>() { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y' }.Where(x => !numberplate.Contains(x)).ToList().Shuffle().First();
+            mutatedLetter = "ABCDEFGHIJKLMNOPRSTUVWXY".Except(numberplate).PickRandom();
         else if (ix > 4)
-            mutatedLetter = new List<char>() { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' }.Where(x => !numberplate.Contains(x)).ToList().Shuffle().First();
+            mutatedLetter = "ABCDEFGHJKLMNOPRSTUVWXYZ".Except(numberplate).PickRandom();
         else
-            mutatedLetter = new List<char>() { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' }.Where(x => x != numberplate[ix]).ToList().Shuffle().First();
-        return new MutatedPlate(numberplate.Substring(0, ix) + mutatedLetter + numberplate.Substring(ix + 1), ix, mutatedLetter);
+            mutatedLetter = "0123456789".Except(numberplate).PickRandom();
+        return new MutatedPlate(numberplate.Substring(0, ix) + mutatedLetter + numberplate.Substring(ix + 1), oldIx, mutatedLetter);
     }
 
     private Image FindHighlight(int pos)
@@ -149,7 +146,7 @@ public class CatchMeIfYouCanScript : MonoBehaviour
     void Initialise()
     {
         Instructions.text = "PRESS THE DISPLAY TO START";
-        Buttons[0].transform.parent.gameObject.SetActive(false);
+        Buttons[0].transform.parent.localScale = Vector3.zero;
     }
 
     void RegenStage()   //for TP
@@ -157,7 +154,7 @@ public class CatchMeIfYouCanScript : MonoBehaviour
         MaskBottom.color = Color.white;
         CurrentState = (int)GameState.Waiting;
         Buttons[6].gameObject.SetActive(true);
-        Buttons[0].transform.parent.gameObject.SetActive(false);
+        Buttons[0].transform.parent.localScale = Vector3.zero;
         for (int i = 0; i < 6; i++)
         {
             PlateGlows[i].color = Color.clear;
@@ -286,7 +283,7 @@ public class CatchMeIfYouCanScript : MonoBehaviour
         Instructions.text = "WHAT DID YOU SEE?";
         MaskBottom.color = Color.white;
         MaskBottom.gameObject.SetActive(false);
-        Buttons[0].transform.parent.gameObject.SetActive(true);
+        Buttons[0].transform.parent.gameObject.transform.localScale = Vector3.one * 0.14f;
         for (int i = 0; i < 6; i++)
         {
             AnswerLabels[i].color = Color.clear;
@@ -364,7 +361,7 @@ public class CatchMeIfYouCanScript : MonoBehaviour
             StartCoroutine(SolveAnim());
             yield break;
         }
-        Buttons[0].transform.parent.gameObject.SetActive(false);
+        Buttons[0].transform.parent.localScale = Vector3.zero;
         for (int i = 0; i < 6; i++)
         {
             PlateGlows[i].color = Color.clear;
@@ -480,9 +477,9 @@ public class CatchMeIfYouCanScript : MonoBehaviour
                     Buttons[AnswerPos].OnInteract();
                     break;
                 default:
-                    yield return true;
                     break;
             }
+            yield return true;
         }
     }
 }

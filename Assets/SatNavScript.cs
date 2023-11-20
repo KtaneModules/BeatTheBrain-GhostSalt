@@ -6,6 +6,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using KModkit;
 using Rnd = UnityEngine.Random;
+using NUnit.Framework.Constraints;
 
 public class SatNavScript : MonoBehaviour
 {
@@ -16,8 +17,9 @@ public class SatNavScript : MonoBehaviour
     public KMBombInfo Bomb;
     public KMAudio Audio;
     public KMSelectable[] Buttons;
-    public Image BlackOverlay, CarRend, RoadStraight, RoadBend, CardinalText, ArrowRend;
-    public Text Instructions;
+    public Image BlackOverlay, CarRend, ArrowRend;
+    public GameObject RoadStraight, RoadBend;
+    public Text CardinalText, Instructions;
     public MeshRenderer[] LEDs;
 
     private KMAudio.KMAudioRef Sound;
@@ -34,61 +36,6 @@ public class SatNavScript : MonoBehaviour
     private int AnswerPos, CurrentStage, CurrentState, Highlighted, Selected;
     private List<string> Answers = new List<string>();
 
-    private string GenerateNumberplate()
-    {
-        var lettersInitial = new char[] { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y' }.Shuffle().Join("");
-        var lettersFinal = new char[] { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' }.Shuffle().Join("");
-        return lettersInitial.Substring(0, 2) + Rnd.Range(0, 100).ToString("00") + " " + lettersFinal.Substring(0, 3);
-    }
-
-    private struct MutatedPlate
-    {
-        public string Numberplate;
-        public int MutationIx;
-        public char MutatedChar;
-
-        public MutatedPlate(string numberplate, int mutationIx, char mutatedChar)
-        {
-            Numberplate = numberplate;
-            MutationIx = mutationIx;
-            MutatedChar = mutatedChar;
-        }
-    }
-
-    void GenerateAnswers()
-    {
-        Answers = new List<string>();
-        var correct = GenerateNumberplate();
-        var answerBase = MutateAnswer(correct);
-        var commonIx = Enumerable.Range(0, 7).Where(x => x != answerBase.MutationIx).PickRandom();
-        Answers.Add(correct);
-        for (int i = 0; i < 7; i++)
-        {
-            var candidateIx = (i > 3 ? i + 1 : i);
-            if (candidateIx == commonIx || candidateIx == answerBase.MutationIx)
-                continue;
-            Answers.Add(MutateAnswer(answerBase.Numberplate, i).Numberplate);
-        }
-        Answers.Shuffle();
-        AnswerPos = Answers.IndexOf(correct);
-    }
-
-    private MutatedPlate MutateAnswer(string numberplate, int ix = -1)
-    {
-        if (ix == -1)
-            ix = Rnd.Range(0, 7);
-        if (ix > 3)
-            ix++;
-        char mutatedLetter;
-        if (ix < 2)
-            mutatedLetter = new List<char>() { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y' }.Where(x => !numberplate.Contains(x)).ToList().Shuffle().First();
-        else if (ix > 4)
-            mutatedLetter = new List<char>() { 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z' }.Where(x => !numberplate.Contains(x)).ToList().Shuffle().First();
-        else
-            mutatedLetter = new List<char>() { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' }.Where(x => x != numberplate[ix]).ToList().Shuffle().First();
-        return new MutatedPlate(numberplate.Substring(0, ix) + mutatedLetter + numberplate.Substring(ix + 1), ix, mutatedLetter);
-    }
-
     private Image FindHighlight(int pos)
     {
         return Buttons[pos].GetComponentsInChildren<Image>().Where(x => x.name == "Highlight").First();
@@ -103,17 +50,16 @@ public class SatNavScript : MonoBehaviour
             Buttons[x].OnHighlight += delegate { if (!new[] { (int)GameState.ShowingCompass, (int)GameState.ShowingAnswer, (int)GameState.Solved, (int)GameState.DoingTurns, (int)GameState.Introduction }.Contains(CurrentState)) FindHighlight(x).color = Color.white; Highlighted = x; };
             Buttons[x].OnHighlightEnded += delegate { FindHighlight(x).color = Color.clear; Highlighted = -1; };
             FindHighlight(x).color = Color.clear;
-            if (x != 6)
+            if (x != 4)
                 Buttons[x].OnInteract += delegate { if (CurrentState == (int)GameState.WaitingForAnswer) SubmitAnswer(x); Buttons[x].AddInteractionPunch(); return false; };
         }
-        Buttons[6].OnInteract += delegate { if (CurrentState == (int)GameState.Waiting) Buttons[6].AddInteractionPunch(); return false; };
-        RoadStraight.gameObject.SetActive(true);
-        RoadBend.gameObject.SetActive(false);
+        Buttons[4].OnInteract += delegate { if (CurrentState == (int)GameState.Waiting) StartCoroutine(Introduction()); Buttons[4].AddInteractionPunch(); return false; };
+        RoadStraight.SetActive(true);
+        RoadBend.SetActive(false);
         CarRend.gameObject.SetActive(false);
         CardinalText.gameObject.SetActive(false);
         ArrowRend.gameObject.SetActive(false);
         BlackOverlay.gameObject.SetActive(false);
-        GenerateAnswers();
     }
 
     // Use this for initialization
@@ -144,74 +90,39 @@ public class SatNavScript : MonoBehaviour
         Buttons[0].transform.parent.gameObject.SetActive(false);
     }
 
-    //void RegenStage()   //for TP
-    //{
-    //    MaskBottom.color = Color.white;
-    //    CurrentState = (int)GameState.Waiting;
-    //    Buttons[6].gameObject.SetActive(true);
-    //    Buttons[0].transform.parent.gameObject.SetActive(false);
-    //    for (int i = 0; i < 6; i++)
-    //    {
-    //        PlateGlows[i].color = Color.clear;
-    //        AnswerPlates[i].transform.parent.parent.localScale = Vector3.one;
-    //    }
-    //    MaskBottom.gameObject.SetActive(true);
-    //    Instructions.text = "PRESS THE DISPLAY TO START";
-    //    GenerateAnswers();
-    //}
-
-    //private IEnumerator CarAnimInward(float speed, float driveDuration = 1.25f)
-    //{
-    //    CarRendFront.gameObject.SetActive(true);
-    //    CarRendFront.transform.localScale = Vector3.one * 0.25f;
-    //    CityOverlay.gameObject.SetActive(true);
-    //    CarRendFront.GetComponentInChildren<Text>().text = Answers[AnswerPos];
-    //    StartCoroutine(DisplayAnswers(speed, driveDuration - 0.25f));
-    //    StartCoroutine(CityOverlayReveal());
-    //    float timer = 0;
-    //    while (timer < driveDuration)
-    //    {
-    //        yield return null;
-    //        timer += Time.deltaTime * speed;
-    //        var scale = Easing.InCirc(timer, 0.25f, 10f, driveDuration);
-    //        CarRendFront.transform.localScale = Vector3.one * (double.IsNaN(scale) ? 10f : scale);
-    //        var x = Easing.InCirc(timer, -12, -1f, driveDuration);
-    //        var y = Easing.InCirc(timer, 57.2f, 838f, driveDuration);
-    //        CarRendFront.transform.localPosition = new Vector3((double.IsNaN(x) ? -1f : x), (double.IsNaN(y) ? 838f : y), 0);
-    //    }
-    //    CarRendFront.gameObject.SetActive(false);
-    //}
-
-    //private IEnumerator CarAnimOutward(float driveDuration = 1f)
-    //{
-    //    CarRendBack.gameObject.SetActive(true);
-    //    CarRendBack.transform.localScale = Vector3.one * 10f;
-    //    CityOverlay.gameObject.SetActive(true);
-    //    CarRendBack.GetComponentInChildren<Text>().text = Answers[AnswerPos];
-    //    StartCoroutine(DisplayAnswers(1f, driveDuration - 0.25f));
-    //    StartCoroutine(CityOverlayReveal());
-    //    float timer = 0;
-    //    while (timer < driveDuration)
-    //    {
-    //        yield return null;
-    //        timer += Time.deltaTime;
-    //        var scale = Easing.OutCirc(timer, 10f, 0.25f, driveDuration);
-    //        CarRendBack.transform.localScale = Vector3.one * (double.IsNaN(scale) ? 10f : scale);
-    //    }
-    //    CarRendBack.gameObject.SetActive(false);
-    //}
-
-    //private IEnumerator CityOverlayReveal(float duration = 0.25f)
-    //{
-    //    float timer = 0;
-    //    while (timer < duration)
-    //    {
-    //        yield return null;
-    //        timer += Time.deltaTime;
-    //        CityOverlay.color = new Color(1, 1, 1, Mathf.Lerp(1f, 0, timer / 0.25f));
-    //    }
-    //    CityOverlay.color = Color.clear;
-    //}
+    private IEnumerator Introduction(float fadeInDuration = 0.65f, float timeBeforeCarEntry = 1f, float carEntryDuration = 0.65f)
+    {
+        Sound = Audio.HandlePlaySoundAtTransformWithRef("music", transform, false);
+        CardinalText.gameObject.SetActive(true);
+        ArrowRend.gameObject.SetActive(true);
+        float timer = 0;
+        while (timer < fadeInDuration)
+        {
+            CardinalText.color = ArrowRend.color = Color.Lerp(Color.clear, Color.black, timer / fadeInDuration);
+            yield return null;
+            timer += Time.deltaTime;
+        }
+        CardinalText.color = ArrowRend.color = Color.black;
+        timer = 0;
+        while (timer < timeBeforeCarEntry)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+        }
+        CarRend.gameObject.SetActive(true);
+        timer = 0;
+        while (timer < carEntryDuration)
+        {
+            ArrowRend.color = Color.Lerp(Color.black, Color.clear, timer / carEntryDuration);
+            CarRend.color = Color.Lerp(new Color(1, 1, 1, 0.5f), Color.white, timer / carEntryDuration);
+            CarRend.transform.localPosition = Vector3.down * Easing.OutSine(timer, 188f, 0f, carEntryDuration);
+            yield return null;
+            timer += Time.deltaTime;
+        }
+        ArrowRend.color = Color.clear;
+        CarRend.color = Color.white;
+        CarRend.transform.localPosition = Vector3.zero;
+    }
 
     //private IEnumerator DisplayAnswers(float speed, float pause = 1.4f, float carFade = 0.25f, float answersFade = 0.5f, float answersAnim = 0.25f)
     //{
