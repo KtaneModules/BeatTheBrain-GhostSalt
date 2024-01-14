@@ -6,7 +6,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using KModkit;
 using Rnd = UnityEngine.Random;
-using NUnit.Framework.Constraints;
 
 public class SatNavScript : MonoBehaviour
 {
@@ -18,7 +17,7 @@ public class SatNavScript : MonoBehaviour
     public KMAudio Audio;
     public KMSelectable[] Buttons;
     public Image BlackOverlay, CarRend, ArrowRend;
-    public GameObject RoadStraight, RoadBend;
+    public GameObject RoadStraight, RoadBend, RoadFinish;
     public Text CardinalText, Instructions;
     public MeshRenderer[] LEDs;
 
@@ -33,8 +32,9 @@ public class SatNavScript : MonoBehaviour
         ShowingAnswer,
         Solved
     }
-    private int AnswerPos, CurrentStage, CurrentState, Highlighted, Selected;
-    private List<string> Answers = new List<string>();
+    private int Answer, CurrentStage, CurrentState, Highlighted, InitialDirection, Selected;
+    private List<int> Turns = new List<int>();
+    private bool TurnCompleted;
 
     private Image FindHighlight(int pos)
     {
@@ -56,6 +56,7 @@ public class SatNavScript : MonoBehaviour
         Buttons[4].OnInteract += delegate { if (CurrentState == (int)GameState.Waiting) StartCoroutine(Introduction()); Buttons[4].AddInteractionPunch(); return false; };
         RoadStraight.SetActive(true);
         RoadBend.SetActive(false);
+        RoadFinish.SetActive(false);
         CarRend.gameObject.SetActive(false);
         CardinalText.gameObject.SetActive(false);
         ArrowRend.gameObject.SetActive(false);
@@ -74,6 +75,24 @@ public class SatNavScript : MonoBehaviour
 
     }
 
+    void GenerateTurns()
+    {
+        var noOfTurns = new[] { 4, 6, 8 }[CurrentStage];
+        if (CurrentStage == 2)
+            InitialDirection = Rnd.Range(0, 4);
+        else
+            InitialDirection = 0;
+        Turns = new List<int>();
+        for (int i = 0; i < noOfTurns; i++)
+        {
+            if (i > 0 && Turns.Last() == 2)
+                Turns.Add(new[] { 1, 3 }.PickRandom());
+            else
+                Turns.Add(Rnd.Range(1, 4));
+        }
+        Answer = (InitialDirection + Turns.Sum()) % 4;
+    }
+
     void SubmitAnswer(int pos)
     {
         Selected = pos;
@@ -87,12 +106,15 @@ public class SatNavScript : MonoBehaviour
     void Initialise()
     {
         Instructions.text = "PRESS THE DISPLAY TO START";
-        Buttons[0].transform.parent.gameObject.SetActive(false);
+        GenerateTurns();
+        Debug.LogFormat("[Sat Nav #{0}] The car started facing {1} and made the following turns: {2}.", _moduleID, new[] { "North", "East", "South", "West" }[InitialDirection], Turns.Select(x => new[] { "right", "u-turn", "left" }[x - 1]).Join(", "));
+        Debug.LogFormat("[Sat Nav #{0}] This means that the car is now facing {1}.", _moduleID, new[] { "North", "East", "South", "West" }[Answer]);
     }
 
-    private IEnumerator Introduction(float fadeInDuration = 0.65f, float timeBeforeCarEntry = 1f, float carEntryDuration = 0.65f)
+    private IEnumerator Introduction(float fadeInDuration = 0.65f, float timeBeforeCarEntry = 1f, float carEntryDuration = 0.65f, float cardinalFadeOutDur = 0.35f)
     {
         Sound = Audio.HandlePlaySoundAtTransformWithRef("music", transform, false);
+        Buttons[4].gameObject.SetActive(false);
         CardinalText.gameObject.SetActive(true);
         ArrowRend.gameObject.SetActive(true);
         float timer = 0;
@@ -122,6 +144,111 @@ public class SatNavScript : MonoBehaviour
         ArrowRend.color = Color.clear;
         CarRend.color = Color.white;
         CarRend.transform.localPosition = Vector3.zero;
+        timer = 0;
+        while (timer < cardinalFadeOutDur)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            CardinalText.color = Color.Lerp(Color.black, Color.clear, timer / cardinalFadeOutDur);
+        }
+        CardinalText.color = Color.clear;
+        StartCoroutine(MakeTurns());
+    }
+
+    private IEnumerator MakeTurns()
+    {
+        foreach (var turn in Turns)
+        {
+            TurnCompleted = false;
+            if (turn == 2)
+                StartCoroutine(MakeUTurn());
+            else
+                StartCoroutine(MakeNinetyTurn(turn == 1));
+            while (!TurnCompleted)
+                yield return null;
+        }
+        StartCoroutine(FinishTurns());
+        yield return null;
+    }
+
+    private IEnumerator MakeNinetyTurn(bool isRightTurn, float timeToCorner = 0.25f, float timeToTurn = 0.45f)
+    {
+        Audio.PlaySoundAtTransform(!isRightTurn ? "sat nav left" : "sat nav right", transform);
+        RoadStraight.SetActive(false);
+        RoadBend.SetActive(true);
+        RoadBend.transform.localEulerAngles = Vector3.zero;
+        RoadBend.transform.localPosition = Vector3.up * 226.5f;
+        RoadBend.transform.localScale = new Vector3(isRightTurn ? 1 : -1, 1, 1);
+        float timer = 0;
+        while (timer < timeToCorner)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            RoadBend.transform.localPosition = Vector3.up * Mathf.Lerp(226.5f, 0, timer / timeToCorner);
+        }
+        RoadBend.transform.localPosition = Vector3.zero;
+        timer = 0;
+        while (timer < timeToTurn)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            RoadBend.transform.localEulerAngles = Vector3.forward * Mathf.Lerp(0, isRightTurn ? 90f : -90f, timer / timeToTurn);
+        }
+        RoadBend.transform.localEulerAngles = Vector3.forward * (isRightTurn ? 90f : -90f);
+        timer = 0;
+        while (timer < timeToCorner)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            RoadBend.transform.localPosition = Vector3.down * Mathf.Lerp(0, 226.5f, timer / timeToCorner);
+        }
+        timer = 0;
+        while (timer < 0.25f)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+        }
+        RoadStraight.SetActive(true);
+        RoadBend.SetActive(false);
+        TurnCompleted = true;
+    }
+
+    private IEnumerator MakeUTurn(float timeToTurn = 0.65f)
+    {
+        Audio.PlaySoundAtTransform("sat nav u-turn", transform);
+        int randomDir = Rnd.Range(0, 2) == 0 ? 180 : -180;
+        float timer = 0;
+        while (timer < timeToTurn)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            RoadStraight.transform.localEulerAngles = Vector3.forward * Easing.InOutQuad(timer, 0, randomDir, timeToTurn);
+        }
+        RoadStraight.transform.localEulerAngles = Vector3.zero;
+        timer = 0;
+        while (timer < 0.25f)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+        }
+        TurnCompleted = true;
+    }
+
+    private IEnumerator FinishTurns(float timeToStop = 0.25f)
+    {
+        RoadStraight.SetActive(false);
+        RoadBend.SetActive(false);
+        RoadFinish.SetActive(true);
+        RoadFinish.transform.localPosition = Vector3.up * 40f;
+        float timer = 0;
+        while (timer < timeToStop)
+        {
+            yield return null;
+            timer += Time.deltaTime;
+            RoadFinish.transform.localPosition = Vector3.up * Easing.OutSine(timer, 40f, 0f, timeToStop);
+        }
+        RoadFinish.transform.localPosition = Vector3.zero;
+        TurnCompleted = true;
     }
 
     //private IEnumerator DisplayAnswers(float speed, float pause = 1.4f, float carFade = 0.25f, float answersFade = 0.5f, float answersAnim = 0.25f)
